@@ -13,6 +13,15 @@ private:
 	void SwapResistType(CUserCmd* pCmd, int iType);
 	void ActivateResistType(CUserCmd* pCmd, int iType);
 
+	struct EnemyAttackRecord
+	{
+		float flLastFireTime = 0.f;
+		float flFireRate = 0.f;
+		int iWeaponID = 0;
+		float flCooldownDanger = 0.f;
+		int iDamageType = -1;
+	};
+
 	int m_iResistType = -1;
 	float m_flChargeLevel = 0.f;
 	float m_flSwapTime = 0.f;
@@ -22,6 +31,21 @@ private:
 	int m_iDamagedType = -1;
 	float m_flDamagedDPS = -1;
 	float m_flDamagedTime = 0.f;
+
+	float m_flTargetSwitchTime = 0.f;
+	float m_flLastSwapTime = 0.f;
+	int m_iLastHealTarget = -1;
+
+	std::unordered_map<int, EnemyAttackRecord> m_mEnemyRecords;
+
+	static constexpr int kVoteWindow = 8;
+	std::array<int, kVoteWindow> m_aResistVotes = {};
+	int m_iVoteIndex = 0;
+	bool m_bCritThreat = false;
+	bool m_bImpactImminent = false;
+
+	int m_iPendingSwaps = 0;
+	int m_iPendingTarget = -1;
 
 #ifdef DEBUG_VACCINATOR
 	std::vector<std::pair<float, int>> vResistDangers = {};
