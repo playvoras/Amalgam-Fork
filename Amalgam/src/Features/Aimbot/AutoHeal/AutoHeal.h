@@ -20,6 +20,8 @@ private:
 		int iWeaponID = 0;
 		float flCooldownDanger = 0.f;
 		int iDamageType = -1;
+		int iHitCount = 1;
+		float flLastHitTime = 0.f;
 	};
 
 	int m_iResistType = -1;

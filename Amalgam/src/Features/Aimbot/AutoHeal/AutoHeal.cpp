@@ -382,6 +382,8 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 		int iIndex = pPlayer->entindex();
 		if (!pPlayer->CanAttack(true, false))
 			continue;
+		if (pPlayer->InCond(TF_COND_URINE) || pPlayer->InCond(TF_COND_STUNNED) || pPlayer->InCond(TF_COND_TAUNTING))
+			continue;
 
 		auto pWeapon = pPlayer->m_hActiveWeapon()->As<CTFWeaponBase>();
 		int nWeaponID = pWeapon ? pWeapon->GetWeaponID() : 0;
@@ -411,12 +413,13 @@ void CAutoHeal::GetDangers(CTFPlayer* pTarget, bool bVaccinator, float& flBullet
 					float flTimeSinceFire = I::GlobalVars->curtime - rec.flLastFireTime;
 					float flCooldownRemaining = std::max(rec.flFireRate - flTimeSinceFire, 0.f);
 					float flCooldownFraction = flCooldownRemaining / rec.flFireRate;
-					float flMemoryDanger = (rec.flCooldownDanger / iPlayerHealth) * flHealthScale * flCooldownFraction;
+					float flEscalation = 1.f + (rec.iHitCount - 1) * 0.4f;
+					float flMemoryDanger = (rec.flCooldownDanger / iPlayerHealth) * flHealthScale * flCooldownFraction * flEscalation;
 					switch (rec.iDamageType)
 					{
 					case MEDIGUN_BULLET_RESIST: flBulletDanger += flMemoryDanger; break;
-					case MEDIGUN_BLAST_RESIST:  flBlastDanger  += flMemoryDanger; break;
-					case MEDIGUN_FIRE_RESIST:   flFireDanger   += flMemoryDanger; break;
+					case MEDIGUN_BLAST_RESIST:  flBlastDanger += flMemoryDanger; break;
+					case MEDIGUN_FIRE_RESIST:   flFireDanger += flMemoryDanger; break;
 					}
 				}
 			}
@@ -854,7 +857,7 @@ void CAutoHeal::AutoVaccinator(CTFPlayer* pLocal, CWeaponMedigun* pWeapon, CUser
 	if (m_flSwapTime < I::GlobalVars->curtime)
 		m_iResistType = pWeapon->GetResistType();
 	m_flChargeLevel = pWeapon->m_flChargeLevel();
-}
+	}
 
 void CAutoHeal::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
 {
@@ -981,6 +984,11 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 			return;
 
 		auto& rec = m_mEnemyRecords[iAttacker];
+		if (rec.iDamageType == m_iDamagedType && I::GlobalVars->curtime - rec.flLastHitTime <= 0.8f)
+			rec.iHitCount = std::min(rec.iHitCount + 1, 4);
+		else
+			rec.iHitCount = 1;
+		rec.flLastHitTime = I::GlobalVars->curtime;
 		rec.flLastFireTime = I::GlobalVars->curtime;
 		rec.flFireRate = flFireRate;
 		rec.iWeaponID = iWeaponID;
@@ -999,14 +1007,32 @@ void CAutoHeal::Event(IGameEvent* pEvent, uint32_t uHash)
 			return;
 
 		m_flDamagedTime = 0.f;
-		m_iResistType = -1;
 		m_flSwapTime = 0.f;
 		m_flLastSwapTime = 0.f;
-		m_mEnemyRecords.clear();
 		m_aResistVotes = {};
 		m_iVoteIndex = 0;
 		m_iPendingSwaps = 0;
 		m_iPendingTarget = -1;
+
+		int iTypeTally[3] = {};
+		for (auto& [iIdx, rec] : m_mEnemyRecords)
+		{
+			if (rec.iDamageType < 0 || rec.iDamageType > 2)
+				continue;
+			auto pEnemy = I::ClientEntityList->GetClientEntity(iIdx)->As<CTFPlayer>();
+			if (!pEnemy || !pEnemy->IsAlive())
+				continue;
+			iTypeTally[rec.iDamageType] += rec.iHitCount;
+		}
+		int iBestType = MEDIGUN_BULLET_RESIST;
+		for (int i = 1; i < 3; i++)
+		{
+			if (iTypeTally[i] > iTypeTally[iBestType])
+				iBestType = i;
+		}
+		m_iResistType = (iTypeTally[0] || iTypeTally[1] || iTypeTally[2]) ? iBestType : -1;
+
+		m_mEnemyRecords.clear();
 	}
 	}
 }
